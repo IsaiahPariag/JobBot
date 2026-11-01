@@ -1,9 +1,9 @@
 import os
 import time
 import sqlite3
+from datetime import datetime, timezone
 import requests
 
-# Your Discord Webhook
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1566561896583266385/UcO1lypDvEunsA9GPiIGL1usfpCGMPhNiDIQ2KnR8Xg0v-S1f1WDchKK699SK5ueLo7H"
 
 DB_PATH = "jobs.db"
@@ -63,6 +63,22 @@ def is_relevant_role(title):
         return False
     return any(inc in title_lower for inc in INCLUDE_KEYWORDS)
 
+def format_timestamp(dt_str_or_epoch):
+    """Formats raw API dates into human-readable strings."""
+    try:
+        if isinstance(dt_str_or_epoch, (int, float)):
+            # Lever returns timestamps in milliseconds
+            dt = datetime.fromtimestamp(dt_str_or_epoch / 1000, tz=timezone.utc)
+            return dt.strftime("%b %d, %Y")
+        elif isinstance(dt_str_or_epoch, str) and dt_str_or_epoch:
+            # Greenhouse returns ISO 8601 strings
+            clean_str = dt_str_or_epoch.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(clean_str)
+            return dt.strftime("%b %d, %Y")
+    except Exception:
+        pass
+    return "Recently Posted"
+
 def send_discord_alert(job):
     payload = {
         "content": "🚨 **New Matching Role Alert!**",
@@ -72,6 +88,7 @@ def send_discord_alert(job):
             "color": 3447003,
             "fields": [
                 {"name": "Location", "value": job.get("location", "Remote"), "inline": True},
+                {"name": "Posted", "value": job.get("posted", "Recently"), "inline": True},
                 {"name": "Source", "value": job.get("source", "Career Board"), "inline": True},
                 {"name": "Apply Link", "value": f"[Click here to apply]({job['url']})", "inline": False}
             ],
@@ -96,6 +113,7 @@ def scan_greenhouse():
                 job_id = f"gh_{company}_{job.get('id')}"
                 url = job.get("absolute_url")
                 location = job.get("location", {}).get("name", "Remote")
+                posted_raw = job.get("updated_at")
                 
                 if is_relevant_role(title) and not is_job_seen(job_id):
                     mark_job_seen(job_id, title, company.capitalize(), url)
@@ -104,6 +122,7 @@ def scan_greenhouse():
                         "company": company.capitalize(),
                         "location": location,
                         "url": url,
+                        "posted": format_timestamp(posted_raw),
                         "source": "Greenhouse"
                     })
         except Exception as e:
@@ -121,6 +140,7 @@ def scan_lever():
                 job_id = f"lev_{company}_{job.get('id')}"
                 url = job.get("hostedUrl")
                 location = job.get("categories", {}).get("location", "Remote")
+                posted_raw = job.get("createdAt")
 
                 if is_relevant_role(title) and not is_job_seen(job_id):
                     mark_job_seen(job_id, title, company.capitalize(), url)
@@ -129,6 +149,7 @@ def scan_lever():
                         "company": company.capitalize(),
                         "location": location,
                         "url": url,
+                        "posted": format_timestamp(posted_raw),
                         "source": "Lever"
                     })
         except Exception as e:
@@ -142,9 +163,6 @@ def run_scanner():
 
 if __name__ == "__main__":
     init_db()
-    # Test ping to verify your Discord webhook works
-    requests.post(DISCORD_WEBHOOK_URL, json={"content": "✅ **Job Alert Bot is active and connected!**"})
-    
     while True:
         run_scanner()
         time.sleep(1800)  # Check every 30 minutes
