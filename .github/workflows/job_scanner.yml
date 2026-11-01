@@ -18,7 +18,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests beautifulsoup4
 
       - name: Run Job Scanner
         run: python run_once.py
