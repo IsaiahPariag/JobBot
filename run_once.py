@@ -1,4 +1,3 @@
-cat << 'EOF' > run_once.py
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -247,4 +246,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-EOF
